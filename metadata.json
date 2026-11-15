@@ -1,0 +1,8 @@
+{
+  "name": "Senior Pet Care Monitor",
+  "description": "The senior pet monitor that tells you what changed, what to ask your vet, and what to do next — without requiring a collar, subscription, or data science degree.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
