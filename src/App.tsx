@@ -32,11 +32,15 @@ import { VetExportModal } from './components/VetExportModal';
 import { CareCircleManager } from './components/CareCircleManager';
 import { PaywallModal } from './components/PaywallModal';
 import { NewPetModal } from './components/NewPetModal';
+import { DonateModal } from './components/DonateModal';
+import { DeletePetConfirmModal } from './components/DeletePetConfirmModal';
 import {
   Calendar,
   PlusCircle,
   Camera,
   Volume2,
+  Trash2,
+  Heart,
 } from 'lucide-react';
 
 export default function App() {
@@ -64,6 +68,8 @@ export default function App() {
   const [showVetExportModal, setShowVetExportModal] = useState(false);
   const [showPaywallModal, setShowPaywallModal] = useState(false);
   const [showNewPetModal, setShowNewPetModal] = useState(false);
+  const [showDonateModal, setShowDonateModal] = useState(false);
+  const [petPendingDelete, setPetPendingDelete] = useState<PetRecord | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
 
@@ -222,6 +228,30 @@ export default function App() {
     await loadPetData(newPet);
   };
 
+  const handleDeletePet = async (petId: string) => {
+    await localDb.deletePet(petId);
+    const remainingPets = pets.filter((p) => p.id !== petId);
+    setPets(remainingPets);
+
+    if (activePet?.id === petId) {
+      const nextPet = remainingPets[0] || null;
+      await localDb.saveSetting('activePetId', nextPet?.id || '');
+      setActivePet(nextPet);
+      if (nextPet) {
+        await loadPetData(nextPet);
+      } else {
+        setCheckIns([]);
+        setEvents([]);
+        setMedications([]);
+        setDoses([]);
+        setCareCircle([]);
+        setCognitiveLogs([]);
+        setQolLogs([]);
+        setCorrelationEvents([]);
+      }
+    }
+  };
+
   const handleUpdateTier = async (newTier: 'free' | 'paid') => {
     setAppTier(newTier);
     await localDb.saveSetting('appTier', newTier);
@@ -261,13 +291,75 @@ export default function App() {
     await loadPetData(activePet);
   };
 
-  if (isLoading || !activePet) {
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#FDFBF7] text-slate-800">
         <div className="flex flex-col items-center gap-3">
           <div className="w-10 h-10 rounded-full border-3 border-amber-800 border-t-transparent animate-spin" />
           <span className="text-sm font-semibold text-slate-600">Loading offline pet records...</span>
         </div>
+      </div>
+    );
+  }
+
+  if (!activePet) {
+    return (
+      <div className="min-h-screen flex flex-col bg-[#FDFBF7] text-[#1F2421]">
+        <OfflineIndicator />
+        <Navigation
+          currentTab={currentTab}
+          onSelectTab={setCurrentTab}
+          activePet={null}
+          allPets={pets}
+          onSelectPet={handleSelectPet}
+          onOpenNewPet={() => setShowNewPetModal(true)}
+          onDeletePet={(p) => setPetPendingDelete(p)}
+          onOpenCheckIn={() => {}}
+          onOpenQuickEvent={() => {}}
+          onOpenVetExport={() => {}}
+          onOpenDonate={() => setShowDonateModal(true)}
+          onOpenPaywall={() => setShowPaywallModal(true)}
+          userRole={currentUserRole}
+          tier={appTier}
+          cognitiveDue={false}
+        />
+
+        <main className="flex-1 max-w-xl w-full mx-auto px-4 py-12 flex items-center justify-center">
+          <div className="w-full p-8 rounded-3xl bg-white border border-[#E5E0D4] shadow-2xs text-center space-y-4">
+            <h1 className="text-2xl font-extrabold text-slate-900">No Senior Pet Profiles</h1>
+            <p className="text-sm text-slate-600 leading-relaxed">
+              Add a senior dog or cat profile to start 20-second daily check-ins, cognitive screenings, and pre-visit vet briefs.
+            </p>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowNewPetModal(true)}
+                className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm transition-all min-h-[48px]"
+              >
+                + Add Senior Pet
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowDonateModal(true)}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-rose-50 hover:bg-rose-100 text-rose-900 font-bold text-sm border border-rose-200 transition-all min-h-[48px]"
+              >
+                <Heart className="w-4 h-4 text-rose-600" />
+                <span>Donate $3</span>
+              </button>
+            </div>
+          </div>
+        </main>
+
+        {showNewPetModal && (
+          <NewPetModal
+            onSave={handleCreatePet}
+            onClose={() => setShowNewPetModal(false)}
+          />
+        )}
+
+        {showDonateModal && (
+          <DonateModal onClose={() => setShowDonateModal(false)} />
+        )}
       </div>
     );
   }
@@ -313,9 +405,11 @@ export default function App() {
         allPets={pets}
         onSelectPet={handleSelectPet}
         onOpenNewPet={() => setShowNewPetModal(true)}
+        onDeletePet={(p) => setPetPendingDelete(p)}
         onOpenCheckIn={() => setShowCheckInModal(true)}
         onOpenQuickEvent={() => setShowQuickEventModal(true)}
         onOpenVetExport={() => setShowVetExportModal(true)}
+        onOpenDonate={() => setShowDonateModal(true)}
         onOpenPaywall={() => setShowPaywallModal(true)}
         userRole={currentUserRole}
         tier={appTier}
@@ -333,9 +427,20 @@ export default function App() {
                     ? 'Age unknown'
                     : `${activePet.ageYears} yrs${activePet.age_estimated ? ' (est.)' : ''}`}
                 </div>
-                <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-                  {activePet.name}
-                </h1>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+                    {activePet.name}
+                  </h1>
+                  <button
+                    type="button"
+                    onClick={() => setPetPendingDelete(activePet)}
+                    title={`Delete ${activePet.name}`}
+                    aria-label={`Delete ${activePet.name}`}
+                    className="w-8 h-8 rounded-xl inline-flex items-center justify-center text-slate-400 hover:text-red-700 hover:bg-red-50 transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
                 <p className="text-sm sm:text-xs text-slate-600">
                   {todayCheckIn ? (
                     <span className="text-emerald-800 font-semibold">
@@ -544,6 +649,19 @@ export default function App() {
             }}
           />
         )}
+        <footer className="mt-8 pt-5 border-t border-[#E5E0D4] flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 no-print">
+          <span>
+            Observation & decision-support history only — never a clinical diagnosis or prescription.
+          </span>
+          <button
+            type="button"
+            onClick={() => setShowDonateModal(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-900 font-bold text-xs border border-rose-200 transition-colors shrink-0"
+          >
+            <Heart className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+            <span>Donate ($3)</span>
+          </button>
+        </footer>
       </main>
 
       {showCheckInModal && (
@@ -603,6 +721,18 @@ export default function App() {
         <NewPetModal
           onSave={handleCreatePet}
           onClose={() => setShowNewPetModal(false)}
+        />
+      )}
+
+      {showDonateModal && (
+        <DonateModal onClose={() => setShowDonateModal(false)} />
+      )}
+
+      {petPendingDelete && (
+        <DeletePetConfirmModal
+          pet={petPendingDelete}
+          onConfirmDelete={handleDeletePet}
+          onClose={() => setPetPendingDelete(null)}
         />
       )}
     </div>

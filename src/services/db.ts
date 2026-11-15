@@ -98,12 +98,19 @@ function getDB(): Promise<IDBDatabase> {
 
 async function seedStarterDataIfEmpty(db: IDBDatabase): Promise<void> {
   return new Promise((resolve) => {
-    const tx = db.transaction(['pets'], 'readonly');
+    const tx = db.transaction(['pets', 'settings'], 'readonly');
     const store = tx.objectStore('pets');
+    const settingsStore = tx.objectStore('settings');
     const countReq = store.count();
+    const seededReq = settingsStore.get('starterSeeded');
+    const seededV2Req = settingsStore.get('starterSeededV2');
 
-    countReq.onsuccess = async () => {
-      if (countReq.result === 0) {
+    tx.oncomplete = () => {
+      const petCount = countReq.result || 0;
+      const alreadySeeded = Boolean(seededReq.result?.value);
+      const alreadyMigratedV2 = Boolean(seededV2Req.result?.value);
+
+      if (petCount === 0 && !alreadySeeded) {
         const writeTx = db.transaction(
           ['pets', 'carecircle', 'medications', 'checkins', 'doses', 'events', 'cognitive_logs', 'qol_logs', 'settings'],
           'readwrite'
@@ -134,18 +141,21 @@ async function seedStarterDataIfEmpty(db: IDBDatabase): Promise<void> {
         writeTx.objectStore('settings').put({ key: 'activePetId', value: STARTER_PET.id });
         writeTx.objectStore('settings').put({ key: 'currentUserRole', value: 'owner' });
         writeTx.objectStore('settings').put({ key: 'appTier', value: 'paid' });
+        writeTx.objectStore('settings').put({ key: 'starterSeeded', value: true });
+        writeTx.objectStore('settings').put({ key: 'starterSeededV2', value: true });
 
         writeTx.oncomplete = () => resolve();
         writeTx.onerror = () => resolve();
-      } else {
-        // Ensure Miso starter cat exists when upgrading from v1 DB
-        const checkMisoReq = store.get(STARTER_CAT_PET.id);
-        checkMisoReq.onsuccess = () => {
+      } else if (petCount > 0 && !alreadyMigratedV2) {
+        // Ensure Miso starter cat exists once when upgrading from v1 DB
+        const checkTx = db.transaction(['pets', 'settings'], 'readonly');
+        const checkMisoReq = checkTx.objectStore('pets').get(STARTER_CAT_PET.id);
+        checkTx.oncomplete = () => {
+          const writeTx = db.transaction(
+            ['pets', 'carecircle', 'medications', 'checkins', 'doses', 'events', 'cognitive_logs', 'qol_logs', 'settings'],
+            'readwrite'
+          );
           if (!checkMisoReq.result) {
-            const writeTx = db.transaction(
-              ['pets', 'carecircle', 'medications', 'checkins', 'doses', 'events', 'cognitive_logs', 'qol_logs'],
-              'readwrite'
-            );
             writeTx.objectStore('pets').put(STARTER_CAT_PET);
             STARTER_CAT_CARE_CIRCLE.forEach((m) => writeTx.objectStore('carecircle').put(m));
             STARTER_CAT_MEDICATIONS.forEach((med) => writeTx.objectStore('medications').put(med));
@@ -155,17 +165,19 @@ async function seedStarterDataIfEmpty(db: IDBDatabase): Promise<void> {
             catHistory.events.forEach((ev) => writeTx.objectStore('events').put(ev));
             catHistory.cognitiveLogs.forEach((cl) => writeTx.objectStore('cognitive_logs').put(cl));
             catHistory.qolLogs.forEach((ql) => writeTx.objectStore('qol_logs').put(ql));
-            writeTx.oncomplete = () => resolve();
-            writeTx.onerror = () => resolve();
-          } else {
-            resolve();
           }
+          writeTx.objectStore('settings').put({ key: 'starterSeeded', value: true });
+          writeTx.objectStore('settings').put({ key: 'starterSeededV2', value: true });
+          writeTx.oncomplete = () => resolve();
+          writeTx.onerror = () => resolve();
         };
-        checkMisoReq.onerror = () => resolve();
+        checkTx.onerror = () => resolve();
+      } else {
+        resolve();
       }
     };
 
-    countReq.onerror = () => resolve();
+    tx.onerror = () => resolve();
   });
 }
 
@@ -237,6 +249,47 @@ export const localDb = {
   },
   async savePet(pet: PetRecord): Promise<void> {
     return putToStore('pets', normalizePetRecord(pet));
+  },
+  async deletePet(petId: string): Promise<void> {
+    const db = await getDB();
+    const petIdStores = [
+      'checkins',
+      'events',
+      'medications',
+      'doses',
+      'carecircle',
+      'cognitive_logs',
+      'qol_logs',
+    ] as const;
+    const snakePetIdStores = ['correlation_events', 'vet_briefs'] as const;
+
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(
+        ['pets', ...petIdStores, ...snakePetIdStores],
+        'readwrite'
+      );
+
+      tx.objectStore('pets').delete(petId);
+
+      const deleteByIndex = (storeName: string, indexName: string) => {
+        const store = tx.objectStore(storeName);
+        const index = store.index(indexName);
+        const cursorReq = index.openKeyCursor(IDBKeyRange.only(petId));
+        cursorReq.onsuccess = () => {
+          const cursor = cursorReq.result;
+          if (cursor) {
+            store.delete(cursor.primaryKey);
+            cursor.continue();
+          }
+        };
+      };
+
+      petIdStores.forEach((name) => deleteByIndex(name, 'petId'));
+      snakePetIdStores.forEach((name) => deleteByIndex(name, 'pet_id'));
+
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
   },
 
   async getCheckIns(petId: string): Promise<DailyCheckIn[]> {

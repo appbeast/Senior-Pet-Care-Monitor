@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Calendar, PlusCircle, Pill, Activity, Brain, Heart, FileText, Sparkles, ChevronDown } from 'lucide-react';
+import { Calendar, PlusCircle, Pill, Activity, FileText, Sparkles, ChevronDown, Trash2, Heart } from 'lucide-react';
 import { PWAInstallButton } from './PWAInstallButton';
 import { PetRecord, UserRole } from '../types';
 
@@ -8,13 +8,15 @@ export type NavTab = 'overview' | 'checkin' | 'events' | 'meds' | 'trends' | 'co
 interface NavigationProps {
   currentTab: NavTab;
   onSelectTab: (tab: NavTab) => void;
-  activePet: PetRecord;
+  activePet: PetRecord | null;
   allPets: PetRecord[];
   onSelectPet: (petId: string) => void;
   onOpenNewPet: () => void;
+  onDeletePet: (pet: PetRecord) => void;
   onOpenCheckIn: () => void;
   onOpenQuickEvent: () => void;
   onOpenVetExport: () => void;
+  onOpenDonate: () => void;
   onOpenPaywall: () => void;
   userRole: UserRole;
   tier: 'free' | 'paid';
@@ -28,10 +30,11 @@ export const Navigation: React.FC<NavigationProps> = ({
   allPets,
   onSelectPet,
   onOpenNewPet,
+  onDeletePet,
   onOpenCheckIn,
   onOpenQuickEvent,
   onOpenVetExport,
-  userRole,
+  onOpenDonate,
   cognitiveDue = false,
 }) => {
   const [showPetDropdown, setShowPetDropdown] = React.useState(false);
@@ -40,9 +43,9 @@ export const Navigation: React.FC<NavigationProps> = ({
     <>
       {/* Top Application Bar - Minimalist 3-zone header */}
       <header className="sticky top-0 z-30 bg-[#FDFBF7]/95 backdrop-blur-md border-b border-[#E5E0D4] no-print">
-        <div className="max-w-6xl mx-auto px-3 sm:px-6 py-3 flex items-center justify-between gap-3 lg:gap-4">
+        <div className="max-w-7xl mx-auto px-3 sm:px-5 lg:px-6 py-3 flex items-center justify-between gap-2 sm:gap-3 lg:gap-4">
           {/* Zone 1: Minimalist Wordmark + Pet Switcher (shrink-0 prevents any overlap) */}
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
             <a
               href="#"
               onClick={(e) => {
@@ -56,56 +59,87 @@ export const Navigation: React.FC<NavigationProps> = ({
             </a>
 
             {/* Pet Switcher dropdown */}
-            <div className="relative shrink-0">
+            {activePet ? (
+              <div className="relative shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowPetDropdown(!showPetDropdown)}
+                  className="inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 text-xs font-semibold text-slate-800 bg-[#F5F2EB] hover:bg-[#EAE5D9] rounded-lg transition-colors border border-[#E5E0D4] min-h-[36px] max-w-[96px] sm:max-w-[115px] xl:max-w-[150px]"
+                >
+                  <span className="truncate">{activePet.name}</span>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                </button>
+
+                {showPetDropdown && (
+                  <div className="absolute left-0 mt-1 w-60 rounded-xl bg-white border border-[#E5E0D4] shadow-lg py-1.5 z-40">
+                    <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Switch Senior Pet
+                    </div>
+                    {allPets.map((p) => (
+                      <div
+                        key={p.id}
+                        className={`flex items-center justify-between px-2 py-1 transition-colors ${
+                          p.id === activePet.id ? 'bg-[#F5F2EB]' : 'hover:bg-[#FDFBF7]'
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onSelectPet(p.id);
+                            setShowPetDropdown(false);
+                          }}
+                          className={`flex-1 text-left px-1.5 py-1 text-xs font-medium flex items-center justify-between gap-2 min-w-0 ${
+                            p.id === activePet.id ? 'text-slate-900 font-bold' : 'text-slate-700'
+                          }`}
+                        >
+                          <span className="truncate">{p.name}</span>
+                          <span className="text-[10px] text-slate-500 capitalize shrink-0">
+                            {p.species_pathway === 'cat' || p.species === 'feline' ? 'Cat' : 'Dog'}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowPetDropdown(false);
+                            onDeletePet(p);
+                          }}
+                          title={`Delete ${p.name}`}
+                          aria-label={`Delete ${p.name}`}
+                          className="w-7 h-7 rounded-lg inline-flex items-center justify-center text-slate-400 hover:text-red-700 hover:bg-red-50 transition-colors shrink-0 ml-1"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                    <div className="border-t border-[#E5E0D4] mt-1 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowPetDropdown(false);
+                          onOpenNewPet();
+                        }}
+                        className="w-full text-left px-3 py-1.5 text-xs font-semibold text-amber-900 hover:bg-amber-50"
+                      >
+                        + Add Another Pet
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
               <button
                 type="button"
-                onClick={() => setShowPetDropdown(!showPetDropdown)}
-                className="inline-flex items-center gap-1 px-2 sm:px-2.5 py-1 text-xs font-semibold text-slate-800 bg-[#F5F2EB] hover:bg-[#EAE5D9] rounded-lg transition-colors border border-[#E5E0D4] min-h-[36px] max-w-[105px] sm:max-w-[120px] xl:max-w-[150px]"
+                onClick={onOpenNewPet}
+                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-amber-900 bg-amber-50 hover:bg-amber-100 rounded-lg border border-amber-200 min-h-[36px]"
               >
-                <span className="truncate">{activePet.name}</span>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                + Add Pet
               </button>
-
-              {showPetDropdown && (
-                <div className="absolute left-0 mt-1 w-52 rounded-xl bg-white border border-[#E5E0D4] shadow-lg py-1.5 z-40">
-                  <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Switch Senior Pet
-                  </div>
-                  {allPets.map((p) => (
-                    <button
-                      key={p.id}
-                      onClick={() => {
-                        onSelectPet(p.id);
-                        setShowPetDropdown(false);
-                      }}
-                      className={`w-full text-left px-3 py-2 text-xs font-medium transition-colors flex items-center justify-between ${
-                        p.id === activePet.id ? 'bg-[#F5F2EB] text-slate-900 font-bold' : 'text-slate-700 hover:bg-[#FDFBF7]'
-                      }`}
-                    >
-                      <span>{p.name}</span>
-                      <span className="text-[10px] text-slate-500 capitalize">
-                        {p.species_pathway === 'cat' || p.species === 'feline' ? 'Cat' : 'Dog'}
-                      </span>
-                    </button>
-                  ))}
-                  <div className="border-t border-[#E5E0D4] mt-1 pt-1">
-                    <button
-                      onClick={() => {
-                        setShowPetDropdown(false);
-                        onOpenNewPet();
-                      }}
-                      className="w-full text-left px-3 py-1.5 text-xs font-semibold text-amber-900 hover:bg-amber-50"
-                    >
-                      + Add Another Pet
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
+            )}
           </div>
 
           {/* Zone 2: Minimalist Desktop Navigation (lg+ only so narrow computer windows never collide) */}
-          <nav className="hidden lg:flex items-center justify-center gap-3.5 xl:gap-6 text-[13px] xl:text-sm font-medium text-slate-600 shrink-0">
+          <nav className="hidden lg:flex items-center justify-center gap-3 xl:gap-5 text-[13px] xl:text-sm font-medium text-slate-600 shrink-0">
             <button
               onClick={() => onSelectTab('overview')}
               className={`hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 py-1 ${
@@ -159,20 +193,33 @@ export const Navigation: React.FC<NavigationProps> = ({
             </button>
           </nav>
 
-          {/* Zone 3: Icon-only Install & Pre-Visit Brief on mobile; labeled on sm+ */}
-          <div className="flex items-center gap-2 shrink-0">
-            <PWAInstallButton />
-
+          {/* Zone 3: Icon-only on mobile; labeled on sm+ */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <button
               type="button"
-              onClick={onOpenVetExport}
-              title="Pre-Visit Vet Brief"
-              aria-label="Pre-Visit Vet Brief"
-              className="inline-flex items-center justify-center gap-1.5 w-10 h-10 sm:w-auto sm:px-3 sm:py-2 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition-colors whitespace-nowrap shrink-0 min-h-[40px]"
+              onClick={onOpenDonate}
+              title="Donate $3"
+              aria-label="Donate $3"
+              className="inline-flex items-center justify-center gap-1.5 w-10 h-10 sm:w-auto sm:px-2.5 sm:py-2 text-xs font-bold text-rose-900 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition-colors whitespace-nowrap shrink-0 min-h-[40px]"
             >
-              <FileText className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-amber-400 shrink-0" />
-              <span className="hidden sm:inline">Pre-Visit Brief</span>
+              <Heart className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-rose-600 shrink-0" />
+              <span className="hidden sm:inline">Donate</span>
             </button>
+
+            <PWAInstallButton />
+
+            {activePet && (
+              <button
+                type="button"
+                onClick={onOpenVetExport}
+                title="Pre-Visit Vet Brief"
+                aria-label="Pre-Visit Vet Brief"
+                className="inline-flex items-center justify-center gap-1.5 w-10 h-10 sm:w-auto sm:px-3 sm:py-2 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl transition-colors whitespace-nowrap shrink-0 min-h-[40px]"
+              >
+                <FileText className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-amber-400 shrink-0" />
+                <span className="hidden sm:inline">Pre-Visit Brief</span>
+              </button>
+            )}
           </div>
         </div>
 
